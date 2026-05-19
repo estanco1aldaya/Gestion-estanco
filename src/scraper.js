@@ -108,102 +108,126 @@ async function scrapeRecaudacion(nombreMaquina, fechaReparto) {
  * Devuelve array de facturas con: numero, cliente (solo nombre del bar), importe, fecha, hora, estado
  */
 async function scrapeFacturasStrator() {
-  const STRATOR_URL = 'https://www-prod13.tpos.logista.com/PortalGamme6/login.jsf';
-  const codigo = process.env.STRATOR_CODIGO || '';
-  const usuario = process.env.STRATOR_USUARIO || 'ADMINISTRADOR';
-  const password = process.env.STRATOR_PASS || '';
+  const codigo  = process.env.STRATOR_CODIGO   || '';
+  const usuario = process.env.STRATOR_USUARIO  || 'ADMINISTRADOR';
+  const password = process.env.STRATOR_PASS    || '';
+
+  if (!codigo || !password) {
+    throw new Error('Faltan las variables STRATOR_CODIGO o STRATOR_PASS en Railway');
+  }
 
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
   });
 
   const page = await browser.newPage();
+  page.setDefaultTimeout(30000);
 
   try {
-    // 1. Login en Strator
-    await page.goto(STRATOR_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    // 1. Acceder a la URL de login (resolvemos el servidor dinámicamente)
+    console.log('[Strator] Accediendo al login...');
+    const loginURL = 'https://www-prod13.tpos.logista.com/PortalGamme6/login.jsf';
+    await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 40000 });
 
-    // Rellenar código punto de venta
-    const inputCodigo = page.locator('input').first();
-    await inputCodigo.fill(codigo);
+    // Esperar a que cargue el formulario JSF
+    await page.waitForSelector('input', { timeout: 15000 });
+
+    // Limpiar y rellenar el código de punto de venta (primer input visible)
+    const inputsCodigo = page.locator('input:not([type="hidden"]):not([type="password"]):not([type="submit"])');
+    await inputsCodigo.first().clear();
+    await inputsCodigo.first().fill(codigo);
 
     // Seleccionar usuario en el desplegable
-    const selectUsuario = page.locator('select');
-    if (await selectUsuario.count() > 0) {
-      await selectUsuario.selectOption({ label: usuario });
+    const selects = page.locator('select');
+    if (await selects.count() > 0) {
+      // Intentar seleccionar por valor o por texto
+      try {
+        await selects.first().selectOption({ label: usuario });
+      } catch {
+        try {
+          await selects.first().selectOption({ value: usuario });
+        } catch {
+          await selects.first().selectOption({ index: 0 });
+        }
+      }
     }
 
     // Rellenar contraseña
     await page.fill('input[type="password"]', password);
+    console.log('[Strator] Credenciales rellenadas, enviando login...');
 
-    // Pulsar Validar
-    await page.click('input[value="Validar"], button:has-text("Validar")');
-    await page.waitForLoadState('networkidle', { timeout: 20000 });
+    // Hacer clic en Validar y esperar navegación
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+      page.click('input[value="Validar"], button:has-text("Validar"), input[type="submit"]')
+    ]);
+
+    // Verificar que el login fue correcto
+    const urlActual = page.url();
+    console.log('[Strator] URL tras login:', urlActual);
+    if (urlActual.includes('login')) {
+      throw new Error('Login fallido en Strator — verifica las credenciales en Railway (STRATOR_CODIGO, STRATOR_USUARIO, STRATOR_PASS)');
+    }
 
     // 2. Navegar a Clientes → Facturas
-    // Clic en la pestaña Clientes del menú superior
+    console.log('[Strator] Navegando a Facturas...');
+
+    // Clic en pestaña Clientes
     await page.click('text="Clientes"');
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
 
-    // Clic en Facturas del menú lateral izquierdo
-    await page.click('text="Facturas"');
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
+    // Clic en Facturas del menú izquierdo
+    await page.click('a:has-text("Facturas"), span:has-text("Facturas"), li:has-text("Facturas")');
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
 
-    // 3. Esperar a que cargue la tabla
-    await page.waitForSelector('table', { timeout: 15000 });
+    // 3. Esperar tabla de facturas
+    await page.waitForSelector('table tr td', { timeout: 20000 });
+    console.log('[Strator] Tabla cargada, extrayendo facturas...');
 
-    // 4. Extraer todas las filas de la tabla
+    // 4. Extraer filas
     const facturas = [];
-
     const filas = await page.locator('table tr').all();
 
     for (const fila of filas) {
       const celdas = await fila.locator('td').all();
-      if (celdas.length < 6) continue; // saltar cabeceras o filas vacías
+      if (celdas.length < 6) continue;
 
       const valores = [];
       for (const celda of celdas) {
         valores.push((await celda.innerText()).trim());
       }
 
-      // Columnas: Ref.Fact | Razón Social | Tipo | Fecha | Hora | Importe | Estado | Estado2
-      const refFact   = valores[0];
-      const razonSoc  = valores[1];
-      const fecha     = valores[3]; // formato DD/MM/YYYY
-      const hora      = valores[4];
+      const refFact    = valores[0];
+      const razonSoc   = valores[1];
+      const fecha      = valores[3];
+      const hora       = valores[4];
       const importeStr = valores[5];
-      const estado    = valores[6];
+      const estado     = valores[6] || '';
 
       if (!refFact || !refFact.startsWith('FC')) continue;
 
-      // Extraer solo el nombre del bar (parte antes de "/")
+      // Mostrar solo nombre del bar (parte antes de "/")
       const nombreBar = razonSoc.includes('/')
         ? razonSoc.split('/')[0].trim()
         : razonSoc.trim();
 
-      // Convertir importe: "570,75 €" → 570.75
+      // Convertir importe "570,75 €" → 570.75
       const importe = parseFloat(
-        importeStr.replace('€', '').replace('.', '').replace(',', '.').trim()
+        importeStr.replace(/[€\s]/g, '').replace('.', '').replace(',', '.')
       ) || 0;
 
-      // Convertir fecha: "19/05/2026" → "2026-05-19"
-      let fechaISO = '';
+      // Convertir fecha "19/05/2026" → "2026-05-19"
+      let fechaISO = new Date().toISOString().split('T')[0];
       if (fecha && fecha.includes('/')) {
         const [d, m, y] = fecha.split('/');
-        fechaISO = `${y}-${m}-${d}`;
+        fechaISO = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
       }
 
-      facturas.push({
-        numero: refFact,
-        cliente: nombreBar,
-        importe,
-        fecha: fechaISO,
-        hora,
-        estado_strator: estado || ''
-      });
+      facturas.push({ numero: refFact, cliente: nombreBar, importe, fecha: fechaISO, hora, estado_strator: estado });
     }
 
+    console.log(`[Strator] Encontradas ${facturas.length} facturas`);
     return facturas;
 
   } finally {
