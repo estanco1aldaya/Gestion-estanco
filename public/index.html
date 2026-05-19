@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión Estanco</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+:root{--brand:#1a4f8a;--brand-light:#e8f0fb;--accent:#e07b2a;--green:#2d6a1f;--green-bg:#eaf3de;--red:#a32d2d;--red-bg:#fcebeb;--amber:#633806;--amber-bg:#faeeda;--border:#e5e7eb;--text:#1a1a1a;--muted:#6b7280;--bg:#f8f8f6;--card:#fff;--radius:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+input,select,textarea,button{font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:7px;padding:8px 10px;outline:none;background:var(--card)}
+input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+button{cursor:pointer}
+
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:2rem;width:100%;max-width:320px}
+.login-logo{font-size:17px;font-weight:500;margin-bottom:1.5rem;display:flex;align-items:center;gap:8px}
+.login-logo i{font-size:22px;color:var(--brand)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%}
+.btn-login{width:100%;padding:9px;background:var(--brand);color:#fff;border:none;border-radius:7px;font-weight:500;margin-top:6px}
+.btn-login:hover{opacity:.9}
+.login-error{font-size:13px;color:var(--red);margin-top:8px;display:none}
+
+#app-screen{display:none;flex-direction:column;min-height:100vh}
+.topbar{background:var(--brand);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar .logo{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px}
+.topbar .logo i{font-size:18px}
+.topbar .user-info{font-size:12px;opacity:.85;display:flex;align-items:center;gap:10px}
+.btn-logout{font-size:12px;padding:4px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px}
+
+.main-nav{display:flex;gap:4px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto}
+.nav-btn{font-size:13px;padding:7px 14px;border-radius:7px;border:1px solid var(--border);white-space:nowrap;display:flex;align-items:center;gap:5px;color:var(--muted);background:var(--card)}
+.nav-btn.active{background:var(--brand-light);border-color:var(--brand);color:var(--brand);font-weight:500}
+.nav-btn .nbadge{background:var(--red-bg);color:var(--red);font-size:11px;padding:1px 6px;border-radius:20px}
+
+.content{padding:16px;max-width:740px;margin:0 auto;width:100%}
+
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-header h2{font-size:16px;font-weight:500}
+.btn-add{font-size:13px;padding:6px 12px;background:var(--brand);color:#fff;border:none;border-radius:7px;display:flex;align-items:center;gap:5px}
+.btn-add:hover{opacity:.9}
+
+.filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.filter-bar label{font-size:13px;color:var(--muted)}
+.filter-bar input{font-size:13px;padding:6px 10px}
+.pill{font-size:12px;padding:3px 10px;border-radius:20px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+
+.item-row{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px}
+.item-row.reparto{border-left:3px solid var(--accent)}
+.item-row.liquidada{border-left:3px solid var(--green);opacity:.7}
+.item-row.clickable{cursor:pointer}
+.item-row.clickable:hover{border-color:#93b4d8}
+.item-row.done .item-title{text-decoration:line-through;opacity:.6}
+.item-body{flex:1;min-width:0}
+.item-title{font-size:14px;font-weight:500;margin-bottom:3px}
+.item-meta{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
+.b-pend{background:#f1efe8;color:#5f5e5a}
+.b-rep{background:var(--amber-bg);color:var(--amber)}
+.b-liq{background:var(--green-bg);color:var(--green)}
+.b-urg{background:var(--red-bg);color:var(--red)}
+.b-norm{background:#f1efe8;color:#5f5e5a}
+.importe{font-size:15px;font-weight:500;text-align:right;min-width:70px}
+.item-actions{display:flex;gap:6px;flex-shrink:0}
+.btn-sm{font-size:12px;padding:5px 10px;border-radius:6px}
+.btn-rep{background:var(--amber-bg);color:var(--amber);border-color:#ef9f27}
+.btn-rep:hover{background:#fac775}
+.btn-del{color:var(--muted);border-color:var(--border);background:none}
+.btn-del:hover{background:var(--red-bg);color:var(--red);border-color:#f09595}
+.btn-cobrar{background:var(--green-bg);color:var(--green);border:1px solid #97c459;font-size:13px;padding:7px 12px;width:100%;margin-top:10px;border-radius:7px}
+.btn-cobrar:hover{background:#c0dd97}
+.check-btn{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:none;padding:0;margin-top:2px}
+.check-btn.done{background:var(--green);border-color:var(--green);color:#fff}
+.empty{text-align:center;padding:2rem;color:var(--muted);font-size:14px}
+
+.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:1rem}
+.modal-wrap.open{display:flex}
+.modal{background:var(--card);border-radius:14px;padding:1.5rem;width:100%;max-width:380px}
+.modal h3{font-size:15px;font-weight:500;margin-bottom:1rem}
+.form-row{margin-bottom:10px}
+.form-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.form-row input,.form-row select,.form-row textarea{width:100%}
+.form-row textarea{height:60px;resize:vertical}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
+.btn-cancel{flex:1;padding:8px}
+.btn-save{flex:1;padding:8px;background:var(--brand);color:#fff;border:none;border-radius:7px;font-weight:500}
+.btn-save:hover{opacity:.9}
+
+.detail-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-top:1rem}
+.btn-back{font-size:13px;color:var(--muted);background:none;border:none;padding:0;display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:1rem}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
+.dl{font-size:12px;color:var(--muted);margin-bottom:2px}
+.dv{font-size:14px}
+.tel-box{background:var(--bg);border-radius:var(--radius);padding:1rem;margin-bottom:1rem}
+.tel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:13px;color:var(--muted)}
+.tel-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tel-item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.tel-item .tl{font-size:12px;color:var(--muted);margin-bottom:4px}
+.tel-item .tv{font-size:19px;font-weight:500;color:var(--brand)}
+.tel-total{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:14px}
+.tel-total .tv{font-weight:500;color:var(--brand);font-size:16px}
+.rec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem}
+.rec-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.rec-field input{width:100%;font-size:15px}
+.result-box{border-radius:8px;padding:1rem;margin-bottom:1rem;display:none}
+.result-box.ok{background:var(--green-bg);border:1px solid #97c459}
+.result-box.mal{background:var(--red-bg);border:1px solid #f09595}
+.result-row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.result-row:last-child{margin-bottom:0}
+.rv-ok{font-weight:500;color:var(--green)}
+.rv-mal{font-weight:500;color:var(--red)}
+.disc-area{display:none;margin-bottom:1rem}
+.disc-area label{display:block;font-size:12px;color:var(--red);margin-bottom:4px;font-weight:500}
+.disc-area textarea{width:100%;font-size:14px;height:60px;border-color:#f09595}
+.btn-confirmar{width:100%;padding:10px;font-size:14px;font-weight:500;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-confirmar.ok{background:var(--green-bg);color:var(--green);border:1px solid #97c459}
+.btn-confirmar.ok:hover{background:#c0dd97}
+.btn-confirmar.mal{background:var(--red-bg);color:var(--red);border:1px solid #f09595}
+.btn-confirmar.mal:hover{background:#f7c1c1}
+.conf-box{border-radius:8px;padding:1rem;text-align:center}
+.conf-box.ok{background:var(--green-bg);border:1px solid #97c459}
+.conf-box.mal{background:var(--amber-bg);border:1px solid #ef9f27}
+.conf-box .icon{font-size:28px;margin-bottom:6px}
+.conf-box.ok .icon,.conf-box.ok p{color:var(--green)}
+.conf-box.mal .icon,.conf-box.mal p{color:var(--amber)}
+.conf-box p{font-size:14px;font-weight:500;margin-bottom:4px}
+.conf-box small{font-size:12px;color:var(--muted)}
+
+.sub-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border)}
+.sub-tab{font-size:13px;padding:7px 14px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;background:none;border-left:none;border-right:none;border-top:none;border-radius:0;display:flex;align-items:center;gap:5px}
+.sub-tab.active{color:var(--brand);font-weight:500;border-bottom-color:var(--brand)}
+.sub-tab .nbadge{background:var(--red-bg);color:var(--red);font-size:11px;padding:1px 6px;border-radius:20px}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.sum-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center}
+.sum-card .sv{font-size:22px;font-weight:500}
+.sum-card .sl{font-size:12px;color:var(--muted);margin-top:2px}
+.sum-card.alert .sv{color:var(--red)}
+.sum-card.good .sv{color:var(--green)}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo"><i class="ti ti-building-store"></i>Gestión Estanco</div>
+    <div class="field"><label>Usuario</label><input type="text" id="l-user" placeholder="usuario" autocomplete="username"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="l-pass" placeholder="••••••" autocomplete="current-password"></div>
+    <button class="btn-login" onclick="doLogin()"><i class="ti ti-login" style="font-size:15px;margin-right:4px"></i>Entrar</button>
+    <div class="login-error" id="l-error">Usuario o contraseña incorrectos</div>
+  </div>
+</div>
+
+<div id="app-screen">
+  <div class="topbar">
+    <div class="logo"><i class="ti ti-building-store"></i><span>Gestión Estanco</span></div>
+    <div class="user-info"><span id="user-name"></span><button class="btn-logout" onclick="doLogout()">Salir</button></div>
+  </div>
+  <div class="main-nav" id="main-nav"></div>
+  <div class="content" id="content"></div>
+</div>
+
+<div class="modal-wrap" id="modal"><div class="modal" id="modal-inner"></div></div>
+
+<script>
+let usuario=null;
+let seccionActual='';
+window._telMonedas=0;
+window._telBilletes=0;
+
+async function doLogin(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value;
+  const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u,password:p})});
+  if(res.ok){const data=await res.json();usuario=data.usuario;iniciarApp();}
+  else{document.getElementById('l-error').style.display='block';}
+}
+document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+async function doLogout(){
+  await fetch('/api/logout',{method:'POST'});
+  usuario=null;
+  document.getElementById('app-screen').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+}
+
+async function checkAuth(){
+  const res=await fetch('/api/me');
+  const data=await res.json();
+  if(data.autenticado){usuario=data.usuario;iniciarApp();}
+  else{document.getElementById('login-screen').style.display='flex';}
+}
+
+function iniciarApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='flex';
+  document.getElementById('user-name').textContent=usuario.nombre+' · '+(usuario.rol==='gerente'?'Gerente':'Empleado');
+  renderNav();
+  irA(usuario.rol==='gerente'?'repartos':'pedidos');
+}
+
+function renderNav(){
+  const nav=document.getElementById('main-nav');
+  const secciones=usuario.rol==='gerente'
+    ?[{id:'repartos',icon:'ti-truck-delivery',label:'Repartos'},{id:'pedidos',icon:'ti-file-invoice',label:'Pedidos'},{id:'estanco',icon:'ti-building-store',label:'Estanco'},{id:'caja',icon:'ti-receipt',label:'Caja'}]
+    :[{id:'pedidos',icon:'ti-file-invoice',label:'Mis pedidos'},{id:'estanco',icon:'ti-building-store',label:'Estanco'},{id:'caja',icon:'ti-receipt',label:'Caja'}];
+  nav.innerHTML=secciones.map(s=>`<button class="nav-btn ${seccionActual===s.id?'active':''}" onclick="irA('${s.id}')"><i class="ti ${s.icon}" style="font-size:15px"></i>${s.label}</button>`).join('');
+}
+
+function irA(seccion){
+  seccionActual=seccion;
+  renderNav();
+  if(seccion==='pedidos')renderPedidos();
+  else if(seccion==='repartos')renderRepartos();
+  else if(seccion==='estanco')renderEstanco();
+  else if(seccion==='caja')renderCaja();
+}
+
+async function renderPedidos(){
+  const hoy=new Date().toISOString().split('T')[0];
+  const facturas=await api('/api/facturas?fecha='+hoy);
+  const pend=facturas.filter(f=>f.estado==='pendiente');
+  const enrep=facturas.filter(f=>f.estado==='en_reparto'||f.estado==='liquidada');
+  document.getElementById('content').innerHTML=`
+    <div class="section-header"><h2>Pedidos del día</h2></div>
+    <div class="filter-bar">
+      <label><i class="ti ti-calendar" style="font-size:14px;vertical-align:-2px;margin-right:4px"></i>Fecha:</label>
+      <input type="date" id="fecha-f" value="${hoy}" onchange="filtrarFecha(this.value)">
+      <span class="pill" id="total-pill">${facturas.length} facturas</span>
+    </div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="showSubTab('pend-tab',this)"><i class="ti ti-clock" style="font-size:13px"></i>Pendientes <span class="nbadge">${pend.length}</span></button>
+      <button class="sub-tab" onclick="showSubTab('rep-tab',this)"><i class="ti ti-truck-delivery" style="font-size:13px"></i>En reparto <span class="nbadge">${enrep.length}</span></button>
+    </div>
+    <div id="pend-tab">${renderFL(pend,'emp')}</div>
+    <div id="rep-tab" style="display:none">${renderFL(enrep,'emp-r')}</div>`;
+}
+
+async function filtrarFecha(fecha){
+  const facturas=await api('/api/facturas?fecha='+fecha);
+  document.getElementById('total-pill').textContent=facturas.length+' facturas';
+  const pend=facturas.filter(f=>f.estado==='pendiente');
+  const enrep=facturas.filter(f=>f.estado==='en_reparto'||f.estado==='liquidada');
+  document.getElementById('pend-tab').innerHTML=renderFL(pend,'emp');
+  document.getElementById('rep-tab').innerHTML=renderFL(enrep,'emp-r');
+}
+
+function renderFL(facturas,tipo){
+  if(!facturas.length)return'<div class="empty"><i class="ti ti-mood-empty" style="font-size:24px;display:block;margin-bottom:8px"></i>No hay facturas aquí</div>';
+  return facturas.map(f=>`
+    <div class="item-row ${f.estado==='en_reparto'?'reparto':f.estado==='liquidada'?'liquidada':''}">
+      <div class="item-body">
+        <div class="item-title">${f.cliente}</div>
+        <div class="item-meta">
+          <span>${f.numero}</span>
+          ${f.maquina?`<span><i class="ti ti-device-desktop" style="font-size:12px"></i> ${f.maquina}${f.plataforma?' · '+f.plataforma:''}</span>`:''}
+          ${f.direccion?`<span>${f.direccion}</span>`:''}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="importe">€${parseFloat(f.importe_albaran||0).toFixed(2)}</div>
+        <span class="badge ${f.estado==='en_reparto'?'b-rep':f.estado==='liquidada'?'b-liq':'b-pend'}">${f.estado==='en_reparto'?'En reparto':f.estado==='liquidada'?'Liquidada':'Pendiente'}</span>
+      </div>
+      ${tipo==='emp'&&f.estado==='pendiente'?`<button class="btn-sm btn-rep" onclick="marcarReparto(${f.id})"><i class="ti ti-truck-delivery" style="font-size:13px"></i> Llevar</button>`:''}
+    </div>`).join('');
+}
+
+async function marcarReparto(id){await api('/api/facturas/'+id+'/reparto','PATCH');renderPedidos();}
+
+async function renderRepartos(){
+  const hoy=new Date().toISOString().split('T')[0];
+  const facturas=await api('/api/facturas?fecha='+hoy);
+  const enrep=facturas.filter(f=>f.estado==='en_reparto');
+  const liq=facturas.filter(f=>f.estado==='liquidada');
+  document.getElementById('content').innerHTML=`
+    <div class="section-header"><h2>Repartos</h2></div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="showSubTab('er-tab',this)"><i class="ti ti-truck-delivery" style="font-size:13px"></i>En reparto <span class="nbadge">${enrep.length}</span></button>
+      <button class="sub-tab" onclick="showSubTab('lq-tab',this)"><i class="ti ti-circle-check" style="font-size:13px"></i>Liquidadas <span class="nbadge">${liq.length}</span></button>
+    </div>
+    <div id="er-tab">${renderFG(enrep)}</div>
+    <div id="lq-tab" style="display:none">${renderFG(liq)}</div>`;
+}
+
+function renderFG(facturas){
+  if(!facturas.length)return'<div class="empty"><i class="ti ti-mood-empty" style="font-size:24px;display:block;margin-bottom:8px"></i>No hay facturas aquí</div>';
+  return facturas.map(f=>`
+    <div class="item-row clickable ${f.estado==='en_reparto'?'reparto':'liquidada'}" onclick='abrirDetalle(${JSON.stringify(f)})'>
+      <div class="item-body">
+        <div class="item-title">${f.cliente}</div>
+        <div class="item-meta">
+          <span>${f.numero}</span>
+          ${f.maquina?`<span><i class="ti ti-device-desktop" style="font-size:12px"></i> ${f.maquina}</span>`:''}
+          ${f.hora_reparto?`<span><i class="ti ti-clock" style="font-size:12px"></i> Salió ${f.hora_reparto}</span>`:''}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="importe">€${parseFloat(f.importe_albaran||0).toFixed(2)}</div>
+        <span class="badge ${f.estado==='en_reparto'?'b-rep':'b-liq'}">${f.estado==='en_reparto'?'En reparto':'Liquidada'}</span>
+      </div>
+      <i class="ti ti-chevron-right" style="font-size:16px;color:var(--muted);margin-top:2px"></i>
+    </div>`).join('');
+}
+
+async function abrirDetalle(f){
+  window._telMonedas=0;window._telBilletes=0;
+  document.getElementById('content').innerHTML=`
+    <button class="btn-back" onclick="renderRepartos()"><i class="ti ti-arrow-left" style="font-size:14px"></i> Volver</button>
+    <div class="detail-wrap">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <i class="ti ti-file-invoice" style="font-size:16px;color:var(--brand)"></i>
+        <div><div style="font-size:15px;font-weight:500">${f.cliente}</div><div style="font-size:12px;color:var(--muted)">${f.numero}</div></div>
+      </div>
+      <div class="detail-grid">
+        <div><div class="dl">Dirección</div><div class="dv">${f.direccion||'—'}</div></div>
+        <div><div class="dl">Máquina</div><div class="dv">${f.maquina||'—'}</div></div>
+        <div><div class="dl">Plataforma</div><div class="dv">${f.plataforma||'—'}</div></div>
+        <div><div class="dl">Hora salida</div><div class="dv">${f.hora_reparto||'—'}</div></div>
+      </div>
+      <div class="tel-box">
+        <div class="tel-head">
+          <span><i class="ti ti-device-desktop" style="font-size:13px;margin-right:4px"></i>Dato telemetría (${f.plataforma||'Mi Vending'})</span>
+          <span id="tel-st" style="font-size:12px;color:var(--muted)"><i class="ti ti-loader" style="font-size:12px"></i> Consultando...</span>
+        </div>
+        <div id="tel-datos"><div style="text-align:center;padding:1rem;color:var(--muted);font-size:13px"><i class="ti ti-loader" style="font-size:20px;display:block;margin-bottom:6px"></i>Obteniendo datos...</div></div>
+      </div>
+      <div id="form-rec">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Si los importes coinciden confirma directamente, o anota lo recibido si hay diferencia:</p>
+        <div class="rec-grid">
+          <div class="rec-field"><label><i class="ti ti-coin" style="font-size:12px"></i> Monedas recibidas (€)</label><input type="number" id="inp-m" placeholder="0.00" step="0.01" oninput="calcRec(${f.id})"></div>
+          <div class="rec-field"><label><i class="ti ti-notes" style="font-size:12px"></i> Billetes recibidos (€)</label><input type="number" id="inp-b" placeholder="0.00" step="0.01" oninput="calcRec(${f.id})"></div>
+        </div>
+        <div class="result-box" id="result-box"></div>
+        <div class="disc-area" id="disc-area"><label><i class="ti ti-alert-triangle" style="font-size:13px;margin-right:4px"></i>Discrepancia — anota el motivo (opcional):</label><textarea id="disc-txt" placeholder="Ej: Faltaban 5€..."></textarea></div>
+        <button class="btn-confirmar ok" id="btn-conf" onclick="confirmarRec(${f.id})"><i class="ti ti-circle-check" style="font-size:15px"></i> Confirmar recaudación</button>
+      </div>
+      <div id="conf-result" style="display:none"></div>
+    </div>`;
+
+  try{
+    const tel=await api('/api/facturas/'+f.id+'/recaudacion');
+    if(tel.error){
+      document.getElementById('tel-datos').innerHTML=`<div style="font-size:13px;color:var(--amber);padding:8px;background:var(--amber-bg);border-radius:8px"><i class="ti ti-alert-triangle" style="font-size:13px;margin-right:4px"></i>${tel.error}${tel.mensaje?'<br><span style="opacity:.8">'+tel.mensaje+'</span>':''}</div>`;
+      document.getElementById('tel-st').innerHTML='<span style="color:var(--amber)">Sin datos hoy</span>';
+    }else{
+      window._telMonedas=tel.hucha||0;
+      window._telBilletes=tel.billetes||0;
+      document.getElementById('tel-datos').innerHTML=`
+        <div class="tel-grid">
+          <div class="tel-item"><div class="tl"><i class="ti ti-coin" style="font-size:13px"></i> Monedas (hucha)</div><div class="tv">€${(tel.hucha||0).toFixed(2)}</div></div>
+          <div class="tel-item"><div class="tl"><i class="ti ti-notes" style="font-size:13px"></i> Billetes</div><div class="tv">€${(tel.billetes||0).toFixed(2)}</div></div>
+        </div>
+        <div class="tel-total"><span style="color:var(--muted)">Total esperado</span><span class="tv">€${((tel.hucha||0)+(tel.billetes||0)).toFixed(2)}</span></div>`;
+      document.getElementById('tel-st').innerHTML=`<span style="color:var(--green)"><i class="ti ti-check" style="font-size:12px"></i> ${tel.fecha||'Hoy'}</span>`;
+    }
+  }catch(e){
+    document.getElementById('tel-datos').innerHTML='<div style="font-size:13px;color:var(--muted)">No se pudo conectar con la plataforma</div>';
+    document.getElementById('tel-st').innerHTML='<span style="color:var(--red)">Error</span>';
+  }
+}
+
+function calcRec(){
+  const m=parseFloat(document.getElementById('inp-m')?.value)||0;
+  const b=parseFloat(document.getElementById('inp-b')?.value)||0;
+  const btn=document.getElementById('btn-conf');
+  if(m===0&&b===0){
+    document.getElementById('result-box').style.display='none';
+    document.getElementById('disc-area').style.display='none';
+    if(btn){btn.className='btn-confirmar ok';btn.innerHTML='<i class="ti ti-circle-check" style="font-size:15px"></i> Confirmar recaudación';}
+    return;
+  }
+  const total=m+b;
+  const telTotal=window._telMonedas+window._telBilletes;
+  const dif=total-telTotal;
+  const cuadra=Math.abs(dif)<0.05||telTotal===0;
+  const rb=document.getElementById('result-box');
+  rb.style.display='block';
+  rb.className='result-box '+(cuadra?'ok':'mal');
+  rb.innerHTML=`
+    <div class="result-row"><span style="color:var(--muted)">Total recibido</span><span class="${cuadra?'rv-ok':'rv-mal'}">€${total.toFixed(2)}</span></div>
+    ${telTotal>0?`<div class="result-row"><span style="color:var(--muted)">Total esperado</span><span style="color:var(--muted)">€${telTotal.toFixed(2)}</span></div>
+    <div class="result-row" style="padding-top:6px;border-top:1px solid rgba(0,0,0,.07);margin-top:4px"><span style="font-weight:500;color:var(--muted)">Diferencia</span><span class="${cuadra?'rv-ok':'rv-mal'}">${(dif>=0?'+':'')+'€'+dif.toFixed(2)}</span></div>`:''}`;
+  document.getElementById('disc-area').style.display=cuadra?'none':'block';
+  if(btn){
+    btn.className='btn-confirmar '+(cuadra?'ok':'mal');
+    btn.innerHTML=cuadra?'<i class="ti ti-circle-check" style="font-size:15px"></i> Confirmar recaudación':'<i class="ti ti-alert-triangle" style="font-size:15px"></i> Guardar con discrepancia';
+  }
+}
+
+async function confirmarRec(id){
+  const m=parseFloat(document.getElementById('inp-m')?.value)||0;
+  const b=parseFloat(document.getElementById('inp-b')?.value)||0;
+  const motivo=document.getElementById('disc-txt')?.value||'';
+  const total=m+b;
+  const telTotal=window._telMonedas+window._telBilletes;
+  const dif=total-telTotal;
+  const cuadra=Math.abs(dif)<0.05||(m===0&&b===0)||telTotal===0;
+  const hora=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  await api('/api/facturas/'+id+'/confirmar','POST',{tel_monedas:window._telMonedas,tel_billetes:window._telBilletes,rec_monedas:m,rec_billetes:b,motivo_discrepancia:motivo||null});
+  document.getElementById('form-rec').style.display='none';
+  const cr=document.getElementById('conf-result');
+  cr.style.display='block';
+  cr.innerHTML=cuadra
+    ?`<div class="conf-box ok"><div class="icon"><i class="ti ti-circle-check"></i></div><p>Recaudación confirmada</p><small>${m===0&&b===0?'Importes correctos según telemetría':'€'+total.toFixed(2)+' recibidos'} · ${hora}</small></div>`
+    :`<div class="conf-box mal"><div class="icon"><i class="ti ti-alert-triangle"></i></div><p>Guardado con discrepancia de ${(dif>=0?'+':'')+'€'+dif.toFixed(2)}</p><small>${motivo||'Sin motivo anotado'} · ${hora}</small></div>`;
+}
+
+async function renderEstanco(){
+  const [tareas,stock,solicitudes,encargos]=await Promise.all([api('/api/tareas'),api('/api/stock'),api('/api/solicitudes'),api('/api/encargos')]);
+  const tp=tareas.filter(t=>!t.completada).length;
+  const solp=solicitudes.filter(s=>!s.completada).length;
+  const encp=encargos.filter(e=>!e.completado).length;
+  document.getElementById('content').innerHTML=`
+    <div class="section-header"><h2>Trabajo diario</h2></div>
+    <div class="summary">
+      <div class="sum-card ${tp>0?'alert':''}"><div class="sv">${tp}</div><div class="sl">Tareas</div></div>
+      <div class="sum-card ${stock.length>0?'alert':''}"><div class="sv">${stock.length}</div><div class="sl">Stock bajo</div></div>
+      <div class="sum-card"><div class="sv">${solp}</div><div class="sl">Solicitudes</div></div>
+      <div class="sum-card"><div class="sv">${encp}</div><div class="sl">Encargos</div></div>
+    </div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="showSubTab('t-tab',this)"><i class="ti ti-checkbox" style="font-size:13px"></i>Tareas${tp>0?`<span class="nbadge">${tp}</span>`:''}</button>
+      <button class="sub-tab" onclick="showSubTab('s-tab',this)"><i class="ti ti-alert-triangle" style="font-size:13px"></i>Stock${stock.length>0?`<span class="nbadge">${stock.length}</span>`:''}</button>
+      <button class="sub-tab" onclick="showSubTab('sol-tab',this)"><i class="ti ti-message-circle" style="font-size:13px"></i>Solicitudes${solp>0?`<span class="nbadge">${solp}</span>`:''}</button>
+      <button class="sub-tab" onclick="showSubTab('enc-tab',this)"><i class="ti ti-package" style="font-size:13px"></i>Encargos${encp>0?`<span class="nbadge">${encp}</span>`:''}</button>
+    </div>
+    <div id="t-tab">
+      <div class="section-header"><h2 style="font-size:14px">Tareas</h2><button class="btn-add" onclick="abrirModalTarea()"><i class="ti ti-plus" style="font-size:14px"></i> Nueva</button></div>
+      ${tareas.map(t=>`<div class="item-row ${t.completada?'done':''}">
+        <button class="check-btn ${t.completada?'done':''}" onclick="toggleItem('tareas',${t.id},${t.completada?0:1})"><i class="ti ti-check" style="font-size:12px"></i></button>
+        <div class="item-body"><div class="item-title">${t.descripcion}</div><div class="item-meta"><span class="badge ${t.prioridad==='urgente'?'b-urg':'b-norm'}">${t.prioridad==='urgente'?'Urgente':'Normal'}</span><span><i class="ti ti-user" style="font-size:12px"></i> ${t.asignada_a||'Todos'}</span>${t.hora_creacion?`<span><i class="ti ti-clock" style="font-size:12px"></i> ${t.hora_creacion}</span>`:''}</div></div>
+        <button class="btn-sm btn-del" onclick="eliminarItem('tareas',${t.id})"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      </div>`).join('')||'<div class="empty">No hay tareas</div>'}
+    </div>
+    <div id="s-tab" style="display:none">
+      <div class="section-header"><h2 style="font-size:14px">Stock bajo</h2><button class="btn-add" onclick="abrirModalStock()"><i class="ti ti-plus" style="font-size:14px"></i> Añadir</button></div>
+      ${stock.map(s=>`<div class="item-row">
+        <div class="item-body"><div class="item-title">${s.producto}</div><div class="item-meta"><span class="badge ${s.nivel==='critico'?'b-urg':'b-rep'}">${s.nivel==='critico'?'Crítico':'Bajo'}</span>${s.nota?`<span>${s.nota}</span>`:''}</div></div>
+        <button class="btn-sm btn-del" title="Marcar resuelto" onclick="eliminarItem('stock',${s.id})"><i class="ti ti-check" style="font-size:13px"></i></button>
+      </div>`).join('')||'<div class="empty"><i class="ti ti-mood-happy" style="font-size:24px;display:block;margin-bottom:8px"></i>Todo el stock está bien</div>'}
+    </div>
+    <div id="sol-tab" style="display:none">
+      <div class="section-header"><h2 style="font-size:14px">Solicitudes clientes</h2><button class="btn-add" onclick="abrirModalSolicitud()"><i class="ti ti-plus" style="font-size:14px"></i> Nueva</button></div>
+      ${solicitudes.map(s=>`<div class="item-row ${s.completada?'done':''}">
+        <button class="check-btn ${s.completada?'done':''}" onclick="toggleItem('solicitudes',${s.id},${s.completada?0:1})"><i class="ti ti-check" style="font-size:12px"></i></button>
+        <div class="item-body"><div class="item-title">${s.producto}</div><div class="item-meta"><span><i class="ti ti-user" style="font-size:12px"></i> ${s.cliente}</span>${s.nota?`<span>${s.nota}</span>`:''}</div></div>
+        <button class="btn-sm btn-del" onclick="eliminarItem('solicitudes',${s.id})"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      </div>`).join('')||'<div class="empty">No hay solicitudes</div>'}
+    </div>
+    <div id="enc-tab" style="display:none">
+      <div class="section-header"><h2 style="font-size:14px">Encargos pendientes</h2><button class="btn-add" onclick="abrirModalEncargo()"><i class="ti ti-plus" style="font-size:14px"></i> Nuevo</button></div>
+      ${encargos.map(e=>`<div class="item-row ${e.completado?'done':''}">
+        <button class="check-btn ${e.completado?'done':''}" onclick="toggleItem('encargos',${e.id},${e.completado?0:1})"><i class="ti ti-check" style="font-size:12px"></i></button>
+        <div class="item-body"><div class="item-title">${e.cliente}</div><div class="item-meta">${e.para_cuando?`<span class="badge b-norm"><i class="ti ti-clock" style="font-size:11px"></i> ${e.para_cuando}</span>`:''}<span>${e.descripcion}</span></div></div>
+        <button class="btn-sm btn-del" onclick="eliminarItem('encargos',${e.id})"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      </div>`).join('')||'<div class="empty">No hay encargos</div>'}
+    </div>`;
+}
+
+async function renderCaja(){
+  const tickets=await api('/api/tickets');
+  const pend=tickets.filter(t=>!t.cobrado);
+  const cob=tickets.filter(t=>t.cobrado);
+  const tPend=pend.reduce((a,t)=>a+t.importe,0);
+  const tCob=cob.reduce((a,t)=>a+t.importe,0);
+  document.getElementById('content').innerHTML=`
+    <div class="section-header"><h2>Tickets de caja</h2><button class="btn-add" onclick="abrirModalTicket()"><i class="ti ti-plus" style="font-size:14px"></i> Nuevo</button></div>
+    <div class="summary">
+      <div class="sum-card ${pend.length>0?'alert':''}"><div class="sv">€${tPend.toFixed(2)}</div><div class="sl">Pendiente</div></div>
+      <div class="sum-card good"><div class="sv">€${tCob.toFixed(2)}</div><div class="sl">Cobrado hoy</div></div>
+      <div class="sum-card ${pend.length>0?'alert':''}"><div class="sv">${pend.length}</div><div class="sl">Tickets abiertos</div></div>
+    </div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="showSubTab('pt-tab',this)"><i class="ti ti-clock" style="font-size:13px"></i>Pendientes${pend.length>0?`<span class="nbadge">${pend.length}</span>`:''}</button>
+      <button class="sub-tab" onclick="showSubTab('ct-tab',this)"><i class="ti ti-circle-check" style="font-size:13px"></i>Cobrados</button>
+    </div>
+    <div id="pt-tab">${renderTickets(pend,true)}</div>
+    <div id="ct-tab" style="display:none">${renderTickets(cob,false)}</div>`;
+}
+
+function renderTickets(tickets,mostrarCobrar){
+  if(!tickets.length)return`<div class="empty">${mostrarCobrar?'No hay tickets pendientes':'Nada cobrado aún'}</div>`;
+  return tickets.map(t=>`<div class="item-row ${t.cobrado?'liquidada':''}">
+    <div class="item-body">
+      <div class="item-title"><i class="ti ti-user" style="font-size:13px;margin-right:4px"></i>${t.cliente}</div>
+      <div class="item-meta"><span>${t.descripcion}</span>${t.hora_creacion?`<span><i class="ti ti-clock" style="font-size:12px"></i> ${t.hora_creacion}</span>`:''}</div>
+      ${t.cobrado?`<div style="font-size:12px;color:var(--green);margin-top:4px"><i class="ti ti-circle-check" style="font-size:12px"></i> Cobrado por ${t.cobrado_por} a las ${t.hora_cobro}</div>`:''}
+      ${mostrarCobrar&&!t.cobrado?`<button class="btn-cobrar" onclick="cobrarTicket(${t.id})"><i class="ti ti-coin" style="font-size:14px"></i> Marcar como cobrado</button>`:''}
+    </div>
+    <div style="flex-shrink:0;text-align:right">
+      <div class="importe">€${parseFloat(t.importe).toFixed(2)}</div>
+      ${!t.cobrado?`<button class="btn-sm btn-del" style="margin-top:6px" onclick="eliminarItem('tickets',${t.id})"><i class="ti ti-trash" style="font-size:13px"></i></button>`:''}
+    </div>
+  </div>`).join('');
+}
+
+// Modales
+function abrirModalTarea(){
+  document.getElementById('modal-inner').innerHTML=`<h3>Nueva tarea</h3>
+    <div class="form-row"><label>Descripción</label><textarea id="m-desc" placeholder="Describe la tarea..."></textarea></div>
+    <div class="form-row"><label>Prioridad</label><select id="m-prio"><option value="normal">Normal</option><option value="urgente">Urgente</option></select></div>
+    <div class="form-row"><label>Asignada a</label><select id="m-asig"><option>Todos</option><option>Turno mañana</option><option>Turno tarde</option><option>Repartidor</option><option>Gerente</option></select></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="cerrarModal()">Cancelar</button><button class="btn-save" onclick="guardarTarea()">Guardar</button></div>`;
+  abrirModal();
+}
+async function guardarTarea(){
+  const desc=document.getElementById('m-desc').value.trim();if(!desc)return;
+  await api('/api/tareas','POST',{descripcion:desc,prioridad:document.getElementById('m-prio').value,asignada_a:document.getElementById('m-asig').value});
+  cerrarModal();renderEstanco();
+}
+
+function abrirModalStock(){
+  document.getElementById('modal-inner').innerHTML=`<h3>Aviso de stock bajo</h3>
+    <div class="form-row"><label>Producto</label><input type="text" id="m-prod" placeholder="Nombre del producto"></div>
+    <div class="form-row"><label>Nivel</label><select id="m-nivel"><option value="critico">Crítico</option><option value="bajo">Bajo</option></select></div>
+    <div class="form-row"><label>Nota</label><input type="text" id="m-nota" placeholder="Ej: pedir al proveedor habitual"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="cerrarModal()">Cancelar</button><button class="btn-save" onclick="guardarStock()">Guardar</button></div>`;
+  abrirModal();
+}
+async function guardarStock(){
+  const prod=document.getElementById('m-prod').value.trim();if(!prod)return;
+  await api('/api/stock','POST',{producto:prod,nivel:document.getElementById('m-nivel').value,nota:document.getElementById('m-nota').value});
+  cerrarModal();renderEstanco();
+}
+
+function abrirModalSolicitud(){
+  document.getElementById('modal-inner').innerHTML=`<h3>Nueva solicitud de cliente</h3>
+    <div class="form-row"><label>Cliente</label><input type="text" id="m-cli" placeholder="Nombre del cliente"></div>
+    <div class="form-row"><label>Producto solicitado</label><input type="text" id="m-prod" placeholder="¿Qué pide?"></div>
+    <div class="form-row"><label>Nota</label><input type="text" id="m-nota" placeholder="Cantidad, marca..."></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="cerrarModal()">Cancelar</button><button class="btn-save" onclick="guardarSolicitud()">Guardar</button></div>`;
+  abrirModal();
+}
+async function guardarSolicitud(){
+  const cli=document.getElementById('m-cli').value.trim();
+  const prod=document.getElementById('m-prod').value.trim();
+  if(!cli||!prod)return;
+  await api('/api/solicitudes','POST',{cliente:cli,producto:prod,nota:document.getElementById('m-nota').value});
+  cerrarModal();renderEstanco();
+}
+
+function abrirModalEncargo(){
+  document.getElementById('modal-inner').innerHTML=`<h3>Nuevo encargo</h3>
+    <div class="form-row"><label>Cliente</label><input type="text" id="m-cli" placeholder="Nombre del cliente o bar"></div>
+    <div class="form-row"><label>Descripción</label><textarea id="m-desc" placeholder="Qué hay que preparar..."></textarea></div>
+    <div class="form-row"><label>Para cuándo</label><input type="text" id="m-cuando" placeholder="Ej: esta tarde, mañana..."></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="cerrarModal()">Cancelar</button><button class="btn-save" onclick="guardarEncargo()">Guardar</button></div>`;
+  abrirModal();
+}
+async function guardarEncargo(){
+  const cli=document.getElementById('m-cli').value.trim();
+  const desc=document.getElementById('m-desc').value.trim();
+  if(!cli||!desc)return;
+  await api('/api/encargos','POST',{cliente:cli,descripcion:desc,para_cuando:document.getElementById('m-cuando').value});
+  cerrarModal();renderEstanco();
+}
+
+function abrirModalTicket(){
+  document.getElementById('modal-inner').innerHTML=`<h3>Nuevo ticket pendiente</h3>
+    <div class="form-row"><label>Cliente</label><input type="text" id="m-cli" placeholder="Nombre del cliente o bar"></div>
+    <div class="form-row"><label>Descripción</label><textarea id="m-desc" placeholder="Qué se llevó..."></textarea></div>
+    <div class="form-row"><label>Importe (€)</label><input type="number" id="m-imp" placeholder="0.00" step="0.01"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="cerrarModal()">Cancelar</button><button class="btn-save" onclick="guardarTicket()">Guardar</button></div>`;
+  abrirModal();
+}
+async function guardarTicket(){
+  const cli=document.getElementById('m-cli').value.trim();
+  const desc=document.getElementById('m-desc').value.trim();
+  const imp=parseFloat(document.getElementById('m-imp').value)||0;
+  if(!cli||!desc||!imp)return;
+  await api('/api/tickets','POST',{cliente:cli,descripcion:desc,importe:imp});
+  cerrarModal();renderCaja();
+}
+async function cobrarTicket(id){await api('/api/tickets/'+id+'/cobrar','PATCH');renderCaja();}
+
+// Helpers generales
+async function toggleItem(tipo,id,val){
+  if(tipo==='tareas')await api('/api/tareas/'+id,'PATCH',{completada:val});
+  else if(tipo==='solicitudes')await api('/api/solicitudes/'+id,'PATCH',{completada:val});
+  else if(tipo==='encargos')await api('/api/encargos/'+id,'PATCH',{completado:val});
+  renderEstanco();
+}
+async function eliminarItem(tipo,id){
+  if(tipo==='tareas')await api('/api/tareas/'+id,'DELETE');
+  else if(tipo==='stock')await api('/api/stock/'+id,'DELETE');
+  else if(tipo==='solicitudes')await api('/api/solicitudes/'+id,'DELETE');
+  else if(tipo==='encargos')await api('/api/encargos/'+id,'DELETE');
+  else if(tipo==='tickets')await api('/api/tickets/'+id,'DELETE');
+  if(tipo==='tickets')renderCaja();else renderEstanco();
+}
+
+function abrirModal(){document.getElementById('modal').classList.add('open');}
+function cerrarModal(){document.getElementById('modal').classList.remove('open');}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))cerrarModal();});
+
+function showSubTab(id,el){
+  const tabs=document.querySelectorAll('[id$="-tab"]');
+  tabs.forEach(t=>{if(t.id!==id&&document.getElementById(id)?.closest(t.parentElement)===t.parentElement||true)t.style.display='none';});
+  document.getElementById(id).style.display='block';
+  el.closest('.sub-tabs').querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+async function api(url,method='GET',body=null){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  const res=await fetch(url,opts);
+  return res.json();
+}
+
+checkAuth();
+</script>
+</body>
+</html>
