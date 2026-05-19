@@ -47,6 +47,7 @@
   .badge-critico { background:#fee2e2; color:#991b1b; }
   .badge-bajo { background:#fef3c7; color:#92400e; }
   .badge-cobrado { background:#d1fae5; color:#065f46; }
+  .badge-atrasada { background:#ede9fe; color:#5b21b6; }
 
   .item-row { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid #f3f4f6; gap:10px; }
   .item-row:last-child { border-bottom:none; }
@@ -146,9 +147,12 @@
     <div class="card">
       <div class="card-header">
         <h2>Facturas del día</h2>
-        <div class="date-filter">
-          <label>Fecha:</label>
-          <input type="date" id="fecha-repartos" onchange="loadFacturas()">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="date-filter">
+            <label>Fecha:</label>
+            <input type="date" id="fecha-repartos" onchange="loadFacturas()">
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-sync" onclick="sincronizarStrator()">🔄 Sincronizar Strator</button>
         </div>
       </div>
       <div id="lista-facturas">
@@ -303,6 +307,28 @@ function showPage(name) {
 }
 
 // ─── REPARTOS ─────────────────────────────────────────────
+async function sincronizarStrator() {
+  const btn = document.getElementById('btn-sync');
+  btn.textContent = '⏳ Sincronizando...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/repartos/sincronizar-strator', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      btn.textContent = `✅ ${d.nuevas} nuevas`;
+      setTimeout(() => { btn.textContent = '🔄 Sincronizar Strator'; btn.disabled = false; }, 3000);
+      loadFacturas();
+    } else {
+      btn.textContent = '❌ Error';
+      btn.disabled = false;
+      alert('Error al sincronizar: ' + (d.error || 'desconocido'));
+    }
+  } catch(e) {
+    btn.textContent = '❌ Error';
+    btn.disabled = false;
+  }
+}
+
 async function loadFacturas() {
   const fecha = document.getElementById('fecha-repartos').value;
   const r = await fetch(`/api/repartos/facturas?fecha=${fecha}`);
@@ -310,22 +336,26 @@ async function loadFacturas() {
   const el = document.getElementById('lista-facturas');
 
   if (!facturas.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📄</div><p>No hay facturas para esta fecha</p></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📄</div><p>No hay facturas. Pulsa "Sincronizar Strator" para cargar las de hoy.</p></div>`;
     return;
   }
 
-  el.innerHTML = facturas.map(f => `
-    <div class="item-row">
+  const hoy = new Date().toISOString().split('T')[0];
+  el.innerHTML = facturas.map(f => {
+    const esAtrasada = f.fecha < hoy && f.estado === 'pendiente';
+    return `
+    <div class="item-row" style="${esAtrasada ? 'background:#faf5ff;border-radius:8px;padding:8px 4px' : ''}">
       <div class="item-info">
-        <div class="item-title">📄 ${f.numero} — ${f.cliente}</div>
-        <div class="item-sub">${f.importe.toFixed(2)} € · ${f.plataforma || 'sin plataforma'} · ${f.ref_maquina || ''}</div>
+        <div class="item-title">🏪 ${f.cliente} <span style="font-weight:400;color:#9ca3af;font-size:.82rem">${f.numero}</span></div>
+        <div class="item-sub">${f.importe.toFixed(2)} € · ${f.fecha} ${f.hora || ''} ${esAtrasada ? '· <strong style="color:#7c3aed">⏰ Pendiente de día anterior</strong>' : ''}</div>
       </div>
       <div class="item-actions">
         <span class="badge badge-${f.estado}">${estadoLabel(f.estado)}</span>
+        ${esAtrasada ? `<span class="badge badge-atrasada">Atrasada</span>` : ''}
         ${f.estado === 'pendiente' ? `<button class="btn btn-warning btn-sm" onclick="marcarEnReparto(${f.id})">Llevar</button>` : ''}
       </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function estadoLabel(s) {
