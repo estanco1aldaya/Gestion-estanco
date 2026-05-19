@@ -1,21 +1,54 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { scrapeFacturasStrator } = require('../scraper');
 
-// Obtener facturas del día (o de una fecha)
+// Obtener facturas: las de hoy + las pendientes de días anteriores que no se repartieron
 router.get('/facturas', (req, res) => {
   const fecha = req.query.fecha || new Date().toISOString().split('T')[0];
   const facturas = db.prepare(`
     SELECT f.*, u.nombre as empleado_nombre
     FROM facturas f
     LEFT JOIN usuarios u ON f.empleado_reparto_id = u.id
-    WHERE f.fecha = ?
-    ORDER BY f.creado_en DESC
-  `).all(fecha);
+    WHERE
+      -- Facturas del día seleccionado
+      f.fecha = ?
+      OR
+      -- Facturas pendientes de días anteriores (acumuladas)
+      (f.fecha < ? AND f.estado = 'pendiente')
+    ORDER BY f.fecha ASC, f.creado_en ASC
+  `).all(fecha, fecha);
   res.json(facturas);
 });
 
-// Añadir factura manualmente (o desde Strator cuando haya API)
+// Sincronizar facturas desde Strator (scraping)
+router.post('/sincronizar-strator', async (req, res) => {
+  try {
+    const facturas = await scrapeFacturasStrator();
+    let nuevas = 0;
+    let existentes = 0;
+
+    for (const f of facturas) {
+      const existe = db.prepare('SELECT id FROM facturas WHERE numero = ?').get(f.numero);
+      if (!existe) {
+        db.prepare(`
+          INSERT INTO facturas (numero, cliente, importe, plataforma, fecha)
+          VALUES (?, ?, ?, 'strator', ?)
+        `).run(f.numero, f.cliente, f.importe, f.fecha);
+        nuevas++;
+      } else {
+        existentes++;
+      }
+    }
+
+    res.json({ ok: true, nuevas, existentes, total: facturas.length });
+  } catch (error) {
+    console.error('Error sincronizando Strator:', error.message);
+    res.status(500).json({ error: 'Error al conectar con Strator', detalle: error.message });
+  }
+});
+
+// Añadir factura manualmente
 router.post('/facturas', (req, res) => {
   const { numero, cliente, importe, ref_maquina, plataforma, fecha } = req.body;
   const fechaUso = fecha || new Date().toISOString().split('T')[0];
@@ -42,7 +75,7 @@ router.patch('/facturas/:id/en-reparto', (req, res) => {
   res.json({ ok: true });
 });
 
-// Obtener facturas en reparto (vista gerente)
+// Obtener facturas en reparto (vista gerente) - sin límite de fecha
 router.get('/en-reparto', (req, res) => {
   const facturas = db.prepare(`
     SELECT f.*, u.nombre as empleado_nombre, l.id as liquidacion_id,
@@ -51,19 +84,17 @@ router.get('/en-reparto', (req, res) => {
     LEFT JOIN usuarios u ON f.empleado_reparto_id = u.id
     LEFT JOIN liquidaciones l ON f.id = l.factura_id
     WHERE f.estado IN ('en_reparto', 'liquidada')
-    AND f.fecha = date('now')
     ORDER BY f.hora_salida DESC
   `).all();
   res.json(facturas);
 });
 
-// Obtener o crear liquidación de una factura
+// Obtener liquidación de una factura
 router.get('/facturas/:id/liquidacion', (req, res) => {
   const { id } = req.params;
   const factura = db.prepare('SELECT * FROM facturas WHERE id = ?').get(id);
   if (!factura) return res.status(404).json({ error: 'Factura no encontrada' });
-
-  let liquidacion = db.prepare('SELECT * FROM liquidaciones WHERE factura_id = ?').get(id);
+  const liquidacion = db.prepare('SELECT * FROM liquidaciones WHERE factura_id = ?').get(id);
   res.json({ factura, liquidacion });
 });
 
