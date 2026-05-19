@@ -321,7 +321,7 @@ async function sincronizarStrator() {
     } else {
       btn.textContent = '❌ Error';
       btn.disabled = false;
-      alert('Error al sincronizar: ' + (d.error || 'desconocido'));
+      alert('Error al sincronizar:\n\n' + (d.error || 'Error desconocido'));
     }
   } catch(e) {
     btn.textContent = '❌ Error';
