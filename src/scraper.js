@@ -1,6 +1,9 @@
 const { chromium } = require('playwright');
+const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 
 const MIVENDING_URL = 'https://mivending.es/miVendingV3/';
+const STRATOR_BASE = 'https://www-prod13.tpos.logista.com/PortalGamme6';
 
 /**
  * Hace scraping de Mi Vending para obtener la recaudación de una máquina.
@@ -108,131 +111,196 @@ async function scrapeRecaudacion(nombreMaquina, fechaReparto) {
  * Devuelve array de facturas con: numero, cliente (solo nombre del bar), importe, fecha, hora, estado
  */
 async function scrapeFacturasStrator() {
-  const codigo  = process.env.STRATOR_CODIGO   || '';
-  const usuario = process.env.STRATOR_USUARIO  || 'ADMINISTRADOR';
+  const codigo   = process.env.STRATOR_CODIGO  || '';
+  const usuario  = process.env.STRATOR_USUARIO || '';
   const password = process.env.STRATOR_PASS    || '';
 
   if (!codigo || !password) {
     throw new Error('Faltan las variables STRATOR_CODIGO o STRATOR_PASS en Railway');
   }
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+  const LOGIN_URL  = `${STRATOR_BASE}/login.jsf`;
+  const START_URL  = `${STRATOR_BASE}/pages/start.jsf`;
+
+  // Gestión de cookies manual
+  let cookies = {};
+  const saveCookies = (res) => {
+    const setCookie = res.headers.raw()['set-cookie'] || [];
+    setCookie.forEach(c => {
+      const [pair] = c.split(';');
+      const [k, v] = pair.split('=');
+      if (k && v) cookies[k.trim()] = v.trim();
+    });
+  };
+  const getCookieHeader = () => Object.entries(cookies).map(([k,v]) => `${k}=${v}`).join('; ');
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'es-ES,es;q=0.9',
+    'Connection': 'keep-alive'
+  };
+
+  // 1. GET login page para obtener ViewState y nombres de campos JSF
+  console.log('[Strator] GET login page...');
+  const loginRes = await fetch(LOGIN_URL, { headers, redirect: 'follow' });
+  saveCookies(loginRes);
+
+  if (!loginRes.ok) {
+    throw new Error(`No se puede acceder a Strator (HTTP ${loginRes.status}). ¿El servidor está disponible desde Railway?`);
+  }
+
+  const loginHtml = await loginRes.text();
+  const $login = cheerio.load(loginHtml);
+
+  // Extraer ViewState y nombres de campos del formulario JSF
+  const viewState = $login('input[name="javax.faces.ViewState"]').val();
+  if (!viewState) {
+    throw new Error('No se encontró ViewState en el login de Strator — la estructura de la página puede haber cambiado');
+  }
+
+  // Encontrar los nombres de los campos del form (JSF genera IDs dinámicos)
+  let fieldCodigo = '', fieldUsuario = '', fieldPassword = '', fieldSubmit = '';
+  $login('input:not([type="hidden"])').each((i, el) => {
+    const name = $login(el).attr('name') || '';
+    const type = $login(el).attr('type') || 'text';
+    if (type === 'password') fieldPassword = name;
+    else if (type === 'submit') fieldSubmit = name;
+    else if (i === 0 || name.toLowerCase().includes('codigo') || name.toLowerCase().includes('pdv')) fieldCodigo = name;
+  });
+  $login('select').each((i, el) => {
+    fieldUsuario = $login(el).attr('name') || '';
   });
 
-  const page = await browser.newPage();
-  page.setDefaultTimeout(30000);
+  console.log('[Strator] Campos encontrados:', { fieldCodigo, fieldUsuario, fieldPassword, fieldSubmit });
 
-  try {
-    // 1. Acceder a la URL de login (resolvemos el servidor dinámicamente)
-    console.log('[Strator] Accediendo al login...');
-    const loginURL = 'https://www-prod13.tpos.logista.com/PortalGamme6/login.jsf';
-    await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 40000 });
-
-    // Esperar a que cargue el formulario JSF
-    await page.waitForSelector('input', { timeout: 15000 });
-
-    // Limpiar y rellenar el código de punto de venta (primer input visible)
-    const inputsCodigo = page.locator('input:not([type="hidden"]):not([type="password"]):not([type="submit"])');
-    await inputsCodigo.first().clear();
-    await inputsCodigo.first().fill(codigo);
-
-    // Seleccionar usuario en el desplegable
-    const selects = page.locator('select');
-    if (await selects.count() > 0) {
-      // Intentar seleccionar por valor o por texto
-      try {
-        await selects.first().selectOption({ label: usuario });
-      } catch {
-        try {
-          await selects.first().selectOption({ value: usuario });
-        } catch {
-          await selects.first().selectOption({ index: 0 });
-        }
-      }
+  // Obtener el valor del usuario en el select
+  let valorUsuario = usuario;
+  $login('select option').each((i, el) => {
+    const text = $login(el).text().trim().toUpperCase();
+    if (text === usuario.toUpperCase()) {
+      valorUsuario = $login(el).attr('value') || usuario;
     }
+  });
 
-    // Rellenar contraseña
-    await page.fill('input[type="password"]', password);
-    console.log('[Strator] Credenciales rellenadas, enviando login...');
+  // 2. POST login
+  console.log('[Strator] POST login...');
+  const formData = new URLSearchParams();
+  if (fieldCodigo) formData.append(fieldCodigo, codigo);
+  if (fieldUsuario) formData.append(fieldUsuario, valorUsuario);
+  if (fieldPassword) formData.append(fieldPassword, password);
+  if (fieldSubmit) formData.append(fieldSubmit, 'Validar');
+  formData.append('javax.faces.ViewState', viewState);
+  // Añadir el nombre del formulario JSF
+  const formName = $login('form').attr('id') || $login('form').attr('name') || '';
+  if (formName) formData.append(formName, formName);
 
-    // Hacer clic en Validar y esperar navegación
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
-      page.click('input[value="Validar"], button:has-text("Validar"), input[type="submit"]')
-    ]);
+  const postRes = await fetch(LOGIN_URL, {
+    method: 'POST',
+    headers: { ...headers, 'Cookie': getCookieHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData.toString(),
+    redirect: 'follow'
+  });
+  saveCookies(postRes);
 
-    // Verificar que el login fue correcto
-    const urlActual = page.url();
-    console.log('[Strator] URL tras login:', urlActual);
-    if (urlActual.includes('login')) {
-      throw new Error('Login fallido en Strator — verifica las credenciales en Railway (STRATOR_CODIGO, STRATOR_USUARIO, STRATOR_PASS)');
-    }
+  const postUrl = postRes.url;
+  const postHtml = await postRes.text();
+  console.log('[Strator] URL tras login:', postUrl);
 
-    // 2. Navegar a Clientes → Facturas
-    console.log('[Strator] Navegando a Facturas...');
-
-    // Clic en pestaña Clientes
-    await page.click('text="Clientes"');
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-
-    // Clic en Facturas del menú izquierdo
-    await page.click('a:has-text("Facturas"), span:has-text("Facturas"), li:has-text("Facturas")');
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-
-    // 3. Esperar tabla de facturas
-    await page.waitForSelector('table tr td', { timeout: 20000 });
-    console.log('[Strator] Tabla cargada, extrayendo facturas...');
-
-    // 4. Extraer filas
-    const facturas = [];
-    const filas = await page.locator('table tr').all();
-
-    for (const fila of filas) {
-      const celdas = await fila.locator('td').all();
-      if (celdas.length < 6) continue;
-
-      const valores = [];
-      for (const celda of celdas) {
-        valores.push((await celda.innerText()).trim());
-      }
-
-      const refFact    = valores[0];
-      const razonSoc   = valores[1];
-      const fecha      = valores[3];
-      const hora       = valores[4];
-      const importeStr = valores[5];
-      const estado     = valores[6] || '';
-
-      if (!refFact || !refFact.startsWith('FC')) continue;
-
-      // Mostrar solo nombre del bar (parte antes de "/")
-      const nombreBar = razonSoc.includes('/')
-        ? razonSoc.split('/')[0].trim()
-        : razonSoc.trim();
-
-      // Convertir importe "570,75 €" → 570.75
-      const importe = parseFloat(
-        importeStr.replace(/[€\s]/g, '').replace('.', '').replace(',', '.')
-      ) || 0;
-
-      // Convertir fecha "19/05/2026" → "2026-05-19"
-      let fechaISO = new Date().toISOString().split('T')[0];
-      if (fecha && fecha.includes('/')) {
-        const [d, m, y] = fecha.split('/');
-        fechaISO = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-      }
-
-      facturas.push({ numero: refFact, cliente: nombreBar, importe, fecha: fechaISO, hora, estado_strator: estado });
-    }
-
-    console.log(`[Strator] Encontradas ${facturas.length} facturas`);
-    return facturas;
-
-  } finally {
-    await browser.close();
+  if (postUrl.includes('login') && !postHtml.includes('start')) {
+    throw new Error('Login fallido en Strator — verifica STRATOR_CODIGO, STRATOR_USUARIO y STRATOR_PASS en Railway');
   }
+
+  // 3. Navegar a la página de facturas
+  // La URL de facturas en Strator es dinámica via JSF, necesitamos simular clicks
+  // Primero obtenemos la página principal y buscamos el link a facturas
+  console.log('[Strator] Buscando enlace a Facturas...');
+  const startRes = await fetch(START_URL, {
+    headers: { ...headers, 'Cookie': getCookieHeader() },
+    redirect: 'follow'
+  });
+  saveCookies(startRes);
+  const startHtml = await startRes.text();
+  const $start = cheerio.load(startHtml);
+
+  // Buscar el ViewState de la página principal
+  const vsStart = $start('input[name="javax.faces.ViewState"]').val() || '';
+
+  // Buscar link o form action para Facturas en el menú
+  let facturasAction = '';
+  $start('a, button, span').each((i, el) => {
+    const text = $start(el).text().trim();
+    if (text === 'Facturas') {
+      const href = $start(el).attr('href') || $start(el).attr('onclick') || '';
+      facturasAction = href;
+    }
+  });
+
+  console.log('[Strator] Acción Facturas:', facturasAction || '(no encontrada, intentando URL directa)');
+
+  // Intentar navegar directamente a la sección de facturas via POST JSF
+  const formStart = $start('form').first().attr('id') || $start('form').first().attr('name') || 'form';
+  const facturasFormData = new URLSearchParams();
+  facturasFormData.append('javax.faces.ViewState', vsStart);
+  facturasFormData.append('javax.faces.partial.ajax', 'true');
+  facturasFormData.append('javax.faces.source', 'menuForm:j_idt_facturas');
+
+  // Hacer click simulado en Facturas buscando el botón/link correcto en el formulario
+  $start('a[id*="factura"], a[id*="Factura"], span[id*="factura"]').each((i, el) => {
+    const id = $start(el).attr('id') || '';
+    if (id) facturasFormData.set('javax.faces.source', id);
+  });
+
+  // Obtener la página de facturas via GET con las cookies de sesión
+  const facturasURL = `${STRATOR_BASE}/pages/start.jsf#`;
+  const facturasRes = await fetch(facturasURL, {
+    headers: { ...headers, 'Cookie': getCookieHeader() },
+    redirect: 'follow'
+  });
+  saveCookies(facturasRes);
+  const facturasHtml = await facturasRes.text();
+  const $f = cheerio.load(facturasHtml);
+
+  // 4. Extraer facturas de la tabla
+  console.log('[Strator] Extrayendo tabla de facturas...');
+  const facturas = [];
+
+  $f('table tr').each((i, row) => {
+    const celdas = $f(row).find('td');
+    if (celdas.length < 6) return;
+
+    const vals = [];
+    celdas.each((j, td) => vals.push($f(td).text().trim()));
+
+    const refFact    = vals[0];
+    const razonSoc   = vals[1];
+    const fecha      = vals[3];
+    const hora       = vals[4];
+    const importeStr = vals[5];
+    const estado     = vals[6] || '';
+
+    if (!refFact || !refFact.startsWith('FC')) return;
+
+    const nombreBar = razonSoc.includes('/') ? razonSoc.split('/')[0].trim() : razonSoc.trim();
+    const importe = parseFloat(importeStr.replace(/[€\s.]/g, '').replace(',', '.')) || 0;
+
+    let fechaISO = new Date().toISOString().split('T')[0];
+    if (fecha && fecha.includes('/')) {
+      const [d, m, y] = fecha.split('/');
+      fechaISO = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+
+    facturas.push({ numero: refFact, cliente: nombreBar, importe, fecha: fechaISO, hora, estado_strator: estado });
+  });
+
+  console.log(`[Strator] Encontradas ${facturas.length} facturas`);
+
+  if (facturas.length === 0) {
+    console.log('[Strator] HTML recibido (primeros 500 chars):', facturasHtml.substring(0, 500));
+    throw new Error('Strator respondió pero no se encontraron facturas en la tabla. Es posible que la navegación al menú de Clientes → Facturas no haya funcionado.');
+  }
+
+  return facturas;
 }
 
 /**
