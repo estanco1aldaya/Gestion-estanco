@@ -35,13 +35,15 @@ router.get('/recaudacion', async (req, res) => {
     // Modo auto: intentar GMBOS primero, luego Mi Vending
     let datos = null;
 
-    if (process.env.GMBOS_USER) {
-      datos = await scrapeRecaudacionGMBOS(nombre_maquina, fecha_reparto).catch(() => null);
+    // Buscar primero en Mi Vending (mayoría de máquinas)
+    if (process.env.MIVENDING_USER) {
+      datos = await scrapeRecaudacion(nombre_maquina, fecha_reparto).catch(() => null);
     }
 
+    // Si no encuentra, buscar en GMBOS
     if (!datos || datos.sin_datos) {
-      if (process.env.MIVENDING_USER) {
-        datos = await scrapeRecaudacion(nombre_maquina, fecha_reparto).catch(() => null);
+      if (process.env.GMBOS_USER) {
+        datos = await scrapeRecaudacionGMBOS(nombre_maquina, fecha_reparto).catch(() => null);
       }
     }
 
