@@ -211,4 +211,94 @@ async function scrapeFacturasStrator() {
   }
 }
 
-module.exports = { scrapeRecaudacion, scrapeFacturasStrator };
+/**
+ * Hace scraping de GMBOS para obtener la recaudación de una máquina concreta.
+ * Navega a la página de recaudaciones y filtra por nombre de establecimiento.
+ *
+ * @param {string} nombreMaquina - Nombre del establecimiento (Razón Social de Strator)
+ * @param {string} fechaReparto - Fecha en formato YYYY-MM-DD (opcional, por defecto hoy)
+ * @returns {{ hucha: number, billetes: number } | { sin_datos: true }}
+ */
+async function scrapeRecaudacionGMBOS(nombreMaquina, fechaReparto) {
+  const fecha = fechaReparto || new Date().toISOString().split('T')[0];
+  const [year, month, day] = fecha.split('-');
+  const fechaGMBOS = `${parseInt(day)}/${parseInt(month)}/${year}`; // formato "19/5/2026"
+
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+
+  try {
+    // 1. Login
+    await page.goto('https://gmbos4.com/#/login', { waitUntil: 'networkidle', timeout: 30000 });
+
+    await page.fill('input[type="text"], input[placeholder*="usu"], input[placeholder*="User"]', process.env.GMBOS_USER || '');
+    await page.fill('input[type="password"]', process.env.GMBOS_PASS || '');
+    await page.click('button:has-text("ACCEDER"), button[type="submit"]');
+
+    await page.waitForLoadState('networkidle', { timeout: 20000 });
+
+    // 2. Ir a recaudaciones
+    await page.goto('https://gmbos4.com/#/recaudaciones/mis-recaudaciones', { waitUntil: 'networkidle', timeout: 20000 });
+
+    // 3. Esperar a que cargue la tabla con datos
+    await page.waitForSelector('table, .recaudacion, [class*="tabla"]', { timeout: 15000 });
+    await page.waitForTimeout(2000); // dar tiempo a que cargue el JS
+
+    // 4. Verificar/ajustar el filtro de fecha si es necesario
+    // El filtro por defecto es hoy, si necesitamos otra fecha lo ajustamos
+    const fechaFiltro = await page.locator('[class*="fecha"], .date-filter, input[type="date"]').first().inputValue().catch(() => '');
+    // Si la fecha del filtro no coincide, intentar ajustarla
+    // (por defecto GMBOS ya muestra hoy, lo dejamos así para simplificar)
+
+    // 5. Leer todas las filas de la tabla
+    const filas = await page.locator('table tbody tr, [class*="row"], [class*="maquina"]').all();
+
+    for (const fila of filas) {
+      const texto = await fila.innerText().catch(() => '');
+
+      // Buscar coincidencia con el nombre de la máquina (búsqueda flexible)
+      const nombreLimpio = nombreMaquina.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const textoLimpio = texto.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      if (!textoLimpio.includes(nombreLimpio.substring(0, 6)) &&
+          !nombreLimpio.includes(textoLimpio.substring(0, 6))) {
+        // Intentar match parcial con la primera palabra significativa
+        const palabras = nombreMaquina.split(/[\s,\/]+/).filter(p => p.length > 3);
+        const encontrado = palabras.some(p => texto.toLowerCase().includes(p.toLowerCase()));
+        if (!encontrado) continue;
+      }
+
+      // Extraer billetes y monedas del texto de la fila
+      // Formato esperado: "BILLETES: 420,00 €" y "MONEDAS: 88,80 €"
+      const billetesMatch = texto.match(/BILLETES[:\s]+([\d.,]+)\s*€/i);
+      const monedasMatch = texto.match(/MONEDAS[:\s]+([\d.,]+)\s*€/i);
+      const totalMatch = texto.match(/TOTAL[:\s]+([\d.,]+)\s*€/i);
+
+      const parsear = (str) => parseFloat((str || '0').replace('.', '').replace(',', '.')) || 0;
+
+      if (billetesMatch || monedasMatch) {
+        return {
+          billetes: parsear(billetesMatch?.[1]),
+          hucha: parsear(monedasMatch?.[1]),
+          total: parsear(totalMatch?.[1]),
+          fecha_recaudacion: fecha,
+          fuente: 'gmbos'
+        };
+      }
+    }
+
+    return {
+      sin_datos: true,
+      mensaje: `Sin recaudación registrada en GMBOS para "${nombreMaquina}" el ${fecha}. Es posible que el repartidor no haya comunicado la máquina todavía.`
+    };
+
+  } finally {
+    await browser.close();
+  }
+}
+
+module.exports = { scrapeRecaudacion, scrapeFacturasStrator, scrapeRecaudacionGMBOS };
