@@ -44,7 +44,7 @@ router.post('/sincronizar-strator', async (req, res) => {
     res.json({ ok: true, nuevas, existentes, total: facturas.length });
   } catch (error) {
     console.error('Error sincronizando Strator:', error.message);
-    res.status(500).json({ error: 'Error al conectar con Strator', detalle: error.message });
+    res.status(500).json({ error: error.message || 'Error al conectar con Strator' });
   }
 });
 
